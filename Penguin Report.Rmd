@@ -1,0 +1,739 @@
+---
+title: "Penguin Report"
+author: "Jack Westmoreland (200394930)"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(palmerpenguins)
+library(gridExtra)
+library(dplyr)
+library(knitr)
+library(moments)
+library(broom)
+library(tidyr)
+library(kableExtra)
+
+data("penguins")
+penguins <- na.omit(penguins) # Removes missing rows
+```
+
+# 1. Exploritory Data Analysis
+Before conducting any statistical analysis we must first conduct some exploratory
+data analysis on our data set. Firstly, i will take a look at the fields the
+data set contains.
+
+```{r viewcolumns, echo=FALSE}
+colnames(penguins)
+```
+The data set consists of measurements taken from penguins from the Anvers Islands.
+eight measurements of each penguin were taken:
+
+- **species**: The species the penguin belongs to
+- **island**: The island the penguin was measured on
+- **bill_length_mm**: The length of the penguin's bill (millimeters)
+- **bill_depth_mm**: The depth of the penguin's bill (millimeters)
+- **flipper_length_mm**: The length of the penguin's flipper (millimeters)
+- **body_mass_mm**: The body mass penguin (grams)
+- **sex**: The sex of the penguin (male or female)
+- **year**: The year the penguin was added to the data set
+
+```{r getsample, echo=FALSE}
+n <- 200
+my.student.number <- 200394930 # Replace this with your student number
+set.seed(my.student.number)
+my.penguins <- penguins[sample(nrow(penguins), n), ]
+```
+
+### 1.1 Summary Statistics
+Using R we can gather some summary statistics on the penguins in the sample
+data set.
+```{r summarystatistics, echo=FALSE}
+summary(my.penguins)
+```
+From this we can see a few things. Firstly, most penguins in the sample \(P\) set are
+from the species Adele and Gentoo, with fewer Chinstrap penguins being found. 
+Most of these penguins were found on the islands Biscoe and Dream. Perhaps there
+is some correlation between species and island. The sample set contains a roughly
+even split of male and female penguins (being only slightly male skewed) and 
+the penguins were recorded in the data set between 2007-2009. 
+
+We can also see the sample mean \(\bar{x}\) of the quantitative attributes taken
+from the penguins. At a cursory glance we can also see that for these values the
+maximum and minimum values in the sample set do not lie massively far away. 
+This hints at the data set not containing any outliers, however to further assess
+this more accurate more accurate measures must be taken. Which will be done
+next by plotting our sample set in histograms.
+
+### 1.2 Penguin Measurment Plots
+```{r allpenguinsplot, fig.width=6.5, fig.height=1.6, fig.align='center', fig.cap="All Penguin Measurements", echo=FALSE}
+p1 <- ggplot(my.penguins, aes(y = bill_length_mm)) +
+  geom_boxplot() +
+  labs(title = "Bill Length", y = "Bill Length (mm)", x = "") +
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(),  # Remove x-axis text
+        axis.ticks.x = element_blank())
+
+p2 <- ggplot(my.penguins, aes(y = bill_depth_mm)) +
+  geom_boxplot() +
+  labs(title = "Bill Depth", y = "Bill Depth (mm)", x = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),  # Remove x-axis text
+        axis.ticks.x = element_blank())
+
+p3 <- ggplot(my.penguins, aes(y = flipper_length_mm)) +
+  geom_boxplot() +
+  labs(title = "Flipper Length", y = "Flipper Length (mm)", x = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),  # Remove x-axis text
+        axis.ticks.x = element_blank())
+
+p4 <- ggplot(my.penguins, aes(y = body_mass_g)) +
+  geom_boxplot() +
+  labs(title = "Body Mass", y = "Body Mass (g)", x = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),  # Remove x-axis text
+        axis.ticks.x = element_blank())
+
+grid.arrange(p1, p2, p3, p4, nrow = 1)
+```
+
+From plotting the four quantitative measurements taken from \(P\) we can
+see that our measurements are all fairly symmetrical. This is apparent due to \(Q_1\)
+and \(Q_3\) of our data being a similar distance from our sample's median.
+Furthermore, we can see that the sample does not exhibit any outliers, as there 
+are no values outside the ranges:
+\[
+\left[ Q_1 - 1.5 \times IQR, \, Q_3 + 1.5 \times IQR \right]
+\]
+We can also see that  bill length, flipper length and body mass all have a fairly 
+large interquartile range indicating there is some spread in the data set. This 
+can investigated by checking our sample standard deviation (\(s\)) for our variables.
+
+```{r standarddeviationcheck, echo=FALSE}
+bill_length_sd <- sd(my.penguins$bill_length_mm, na.rm = TRUE)
+bill_depth_sd <- sd(my.penguins$bill_depth_mm, na.rm = TRUE)
+flipper_length_sd <- sd(my.penguins$flipper_length_mm, na.rm = TRUE)
+body_mass_sd <- sd(my.penguins$body_mass_g, na.rm = TRUE)
+
+cat("Standard Deviation of Bill Length (mm):", bill_length_sd, "\n")
+cat("Standard Deviation of Bill Depth (mm):", bill_depth_sd, "\n")
+cat("Standard Deviation of Flipper Length (mm):", flipper_length_sd, "\n")
+cat("Standard Deviation of Body Mass (g):", body_mass_sd, "\n")
+```
+As we can see there is some sample standard deviation in our bill/flipper length 
+and body mass variables. This is most noticeable for body mass where our samples 
+are on average 825 grams from the body mass mean (\( \bar{x}\)). \(s\) is also 
+fairly large for bill length and flipper length, whereas bill depth is 
+concentrated at it's \(\bar{x}\)
+
+### 1.3 Difference in Species
+We could expect that different species of penguins could have different mean \(\bar{x}\)
+measurements for our sample data set attributes. To check this we can plot box plots
+comparing between the species.
+```{r plotbyspecies, fig.width=8, fig.height=2, fig.align='center', fig.cap="Penguin Measurements by Species", fig.pos="H", echo=FALSE}
+p1 <- ggplot(my.penguins, aes(x = species, y = bill_length_mm)) +
+  geom_boxplot() +
+  labs(title = "Bill Length", x = "Species", y = "Bill Length (mm)") +
+  theme(axis.text.x = element_text(size = 6))
+
+
+p2 <- ggplot(my.penguins, aes(x = species, y = bill_depth_mm)) +
+  geom_boxplot() +
+  labs(title = "Bill Depth", x = "Species", y = "Bill Depth (mm)") +
+  theme(axis.text.x = element_text(size = 6))
+
+p3 <- ggplot(my.penguins, aes(x = species, y = flipper_length_mm)) +
+  geom_boxplot() +
+  labs(title = "Flipper Length", x = "Species", y = "Flipper Length (mm)") +
+  theme(axis.text.x = element_text(size = 6))
+
+p4 <- ggplot(my.penguins, aes(x = species, y = body_mass_g)) +
+  geom_boxplot() +
+  labs(title = "Body Mass", x = "Species", y = "Body Mass (g)") +
+  theme(axis.text.x = element_text(size = 6))
+
+grid.arrange(p1, p2, p3, p4, nrow = 1)
+
+```
+As we can see there is large variation of these measurements in our sample set \(P\)
+depending on the species. For example Gentoo penguins seems to have much
+longer flippers, weigh more, but have a smaller bill depth than the other penguins.
+This makes penguin species an important measurement when attempting to calculate
+our expected values of these measurements for these penguins.
+
+# 2. Fitting A Distribution
+
+From sample set \(P\) it would be helpful to fit a probability distribution for
+some of the penguins' measurements. This will allow for us to estimate the
+probability of penguins outside the sample holding specific measurements. To
+do this I will first plot a histogram of body mass for our sample set \(s\), which
+should give a rough idea of what distribution describes the sample data.
+
+```{r histplotallspecies, fig.width=3.5, fig.height=2, fig.align='center', fig.cap="Body Mass Histogram for all Species", echo=FALSE}
+ggplot(my.penguins, aes(x = body_mass_g)) +
+  geom_histogram(binwidth = 200, fill = "skyblue", color = "black") +
+  labs(title = "Body Mass Distribution for Penguins", 
+       x = "Body Mass (g)", 
+       y = "Frequency") +
+  theme_minimal()
+```
+From plotting body mass we can see that the distribution of the sample data
+does not seem to resemble any continuous distributions. This is likely due to the
+large variation of body mass between species we observed in Figure 2.
+Therefore splitting our penguin species up and plotting the distribution by species
+may get us better results.
+
+From the sample set, only 45/200 of our penguins are Chinstrap species. Therefore
+to give a more robust statistic for this species it would be beneficial to combine
+them with the Adelie species. This would increase the sample size for statistical
+analysis. To check if this is viable, a t-test can be performed to check for
+statistical differences between these species' body mass. First we must
+conduct a Barlett test to check if the variance for these sets are equal.
+
+```{r BarlettTestSpecies, echo=FALSE}
+adelie <- subset(my.penguins, species == "Adelie")
+chinstrap <- subset(my.penguins, species == "Chinstrap")
+
+combined_data <- data.frame(body_mass_g = c(adelie$body_mass_g, chinstrap$body_mass_g),
+                            species = factor(rep(c("Adelie", "Chinstrap"), 
+                            c(nrow(adelie), nrow(chinstrap)))))
+bartlett.test(body_mass_g ~ species, data = combined_data)
+
+```
+Our Bartlett gives us a p-value of 0.15, which is significantly large. Therefore
+we can assume that the null hypothesis \(H_0\), that these is no significant variance
+\(\sigma^2\) differences between the species body masses, holds and we can proceed with a
+t-test for body mass between adelie and chinstrap species.
+
+```{r t-testSpecies, echo=FALSE}
+results <- t.test(adelie$body_mass_g, chinstrap$body_mass_g, var.equal = TRUE)
+p_value <- results$p.value
+conf_interval <- results$conf.int
+
+cat("P-value:", p_value, "\n")
+cat("95% Confidence Interval:", conf_interval, "\n")
+```
+From this two sample t-test we can see that the p value is significantly above
+the 0.05 threshold for saying there is significant differences in these species
+body size. Additionally, the 95% confidence interval of this test contains 0.
+Further indicating there are no significant differences. This should allow for
+the combination of these species when estimating their body mass probability
+distributions.
+
+### 2.1 Normal Distribution.
+```{r histplotbyspecie, fig.width=8, fig.height=2, fig.align='center', fig.cap="Body Mass Histogram for Gentoo and combined Adelie,Chinstrap Penguins",  echo=FALSE}
+p1 <- ggplot(my.penguins[my.penguins$species == "Gentoo", ], aes(x = body_mass_g)) +
+  geom_histogram(bins = 20, fill = "skyblue", color = "black") +
+  labs(title = "Body Mass Distribution for Gentoo Penguins", 
+       x = "Body Mass (g)", 
+       y = "Frequency") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 9, hjust = 0.5))
+
+p2 <- ggplot(my.penguins[my.penguins$species %in% c("Adelie", "Chinstrap"), ],
+       aes(x = body_mass_g)) +
+  geom_histogram(bins = 20, fill = "skyblue", color = "black") +
+  labs(title = "Body Mass Distribution for Adiele and Chinstrap Penguins", 
+       x = "Body Mass (g)", 
+       y = "Frequency") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 9, hjust = 0.5))
+
+grid.arrange(p1, p2, nrow = 1)
+```
+These histograms seem to be resemble a normal distribution. Therefore it could
+prove useful to fit to our data. This can be further  investigated by using 
+quantile-quantile plots to visually see if the values from \(G\) and 
+(\( C \cup A \)) resemble the normal distributions. If the plotted quantile
+closely align with the normal distribution quantile line it is likely that this
+is the case.
+```{r qqplots, fig.width=8, fig.height=3, fig.align='center', fig.cap="QQPlots for body mass normal distribution" ,echo=FALSE}
+gentoo_penguins <- my.penguins %>% filter(species == "Gentoo")
+chinstrap_adelie_penguins <- my.penguins %>% filter(species %in% c("Chinstrap", "Adelie"))
+par(mfrow = c(1, 2))
+
+qqnorm(gentoo_penguins$body_mass_g, main = "Gentoo QQ Plot of Body Mass", 
+       cex.main = 0.8, cex.lab = 0.8, cex.axis = 0.8, cex = 0.7)
+qqline(gentoo_penguins$body_mass_g, col = "red")
+
+qqnorm(chinstrap_adelie_penguins$body_mass_g, main = "Chinstrap & Adelie QQ Plot of Body Mass",
+       cex.main = 0.8, cex.lab = 0.8, cex.axis = 0.8, cex = 0.7)
+qqline(chinstrap_adelie_penguins$body_mass_g, col = "blue")
+
+par(mfrow = c(1, 1))
+```
+From our QQplots we can further verify that both our Gentoo set \(G\) and the
+combined Adelie Chinstrap set \(C\cup A\) seem to resemble a normal distribution.
+To fit this distribution we must first calculate the mean \(\mu\) and variance 
+that \(\sigma^2\) best describe the normal distribution of \(G\) and \(C\cup A\).
+To do this the log likelihood function or normal distribution can be used,
+\[
+\log L(\mu, \sigma^2 \mid x) = -\frac{n}{2} \log(2\pi) - \frac{n}{2} \log(\sigma^2) - \frac{1}{2\sigma^2} \sum_{i=1}^{n} (x_i - \mu)^2
+\]
+The minimized negative log likelihood function for \(G\) and \(C\cup A\) will
+be calculated using R.
+
+```{r minimiseloglikelyhood, echo=FALSE}
+neg_log_likelihood <- function(params, data) {
+  mu <- params[1]
+  sigma_sq <- params[2]
+  n <- length(data)
+  
+  # Calculate the negative log-likelihood
+  nll <- -(-n/2 * log(2 * pi) - n/2 * log(sigma_sq) - sum((data - mu)^2) / (2 * sigma_sq))
+  return(nll)
+}
+
+gentoo_data <- gentoo_penguins$body_mass_g
+
+# Initial guesses for mu and sigma^2
+init_params <- c(mean(gentoo_data), var(gentoo_data))
+
+# Perform optimization to maximize likelihood
+gentoo_fit <- optim(init_params, neg_log_likelihood, data = gentoo_data, method = "L-BFGS-B", lower = c(-Inf, 0))
+
+gentoo_mu <- gentoo_fit$par[1]
+gentoo_sigma_sq <- gentoo_fit$par[2]
+
+chinstrap_adelie_data <- chinstrap_adelie_penguins$body_mass_g
+
+init_params2 <- c(mean(chinstrap_adelie_data), var(chinstrap_adelie_data))
+
+chinstrap_adelie_fit <- optim(init_params2, neg_log_likelihood, data = chinstrap_adelie_data, method = "L-BFGS-B", lower = c(-Inf, 0))
+
+chinstrap_adelie_mu <- chinstrap_adelie_fit$par[1]
+chinstrap_adelie_sigma_sq <- chinstrap_adelie_fit$par[2]
+
+gentoo_sample_mean <- mean(gentoo_penguins$body_mass_g)
+gentoo_sample_variance <- var(gentoo_penguins$body_mass_g)
+
+ChinstrapAdelie_sample_mean <- mean(chinstrap_adelie_penguins$body_mass_g)
+ChinstrapAdelie_sample_variance <- var(chinstrap_adelie_penguins$body_mass_g)
+```
+**\( G \) \(\hat{\mu}\):** `r round(gentoo_mu, 2)`. 
+**\( G \) \(\hat{\sigma}^2\):** `r round(gentoo_sigma_sq, 2)`
+
+**\( G \) \(\bar{x}\):** `r round(gentoo_sample_mean, 2)`. 
+**\( G \) \(s^2\):** `r round(gentoo_sample_variance, 2)`
+
+**\( (C \cup A) \) \(\hat{\mu}\):** `r round(chinstrap_adelie_mu, 2)`.
+**\( (C \cup A) \) \(\hat{\sigma}^2\):** `r round(chinstrap_adelie_sigma_sq, 2)`
+
+**\( (C \cup A) \) \(\bar{x}\):** `r round(ChinstrapAdelie_sample_mean, 2)`. 
+**\( (C \cup A) \) \(s^2\):** `r round(ChinstrapAdelie_sample_variance, 2)`
+
+From maximizing the log normal distribution likelihood function we get the
+variables for both these sample sets' normal distribution variables. We can check
+these against the sample mean \(\bar{x}\) and sample variance \(s^2\) of these
+sets to see that they are identical. This is expected as the recommended estimators
+for normal distribution are actually these values.
+
+```{r fittingnormaldist, fig.width=8, fig.height=2, fig.align='center', fig.cap="Fitted Normal Distributions", echo=FALSE, warning=FALSE}
+x_values_gentoo <- seq(min(gentoo_penguins$body_mass_g), max(gentoo_penguins$body_mass_g), length.out = 100)
+fitted_gentoo <- dnorm(x_values_gentoo, mean = gentoo_mu, sd = sqrt(gentoo_sigma_sq))
+fitted_gentoo_df <- data.frame(x = x_values_gentoo, y = fitted_gentoo)
+
+p1 <- ggplot(gentoo_penguins, aes(x = body_mass_g)) +
+  geom_histogram(aes(y = ..density..), bins = 20, fill = "lightblue", color = "black") +
+  geom_line(data = fitted_gentoo_df, aes(x = x, y = y), color = "red", size = 1.2) +
+  labs(title = "Fitted Normal Distribution for Gentoo Penguins' Body Mass",
+       x = "Body Mass (g)", 
+       y = "Density") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 8, hjust = 0.5),)
+
+
+x_values_chinstrap_adelie <- seq(min(chinstrap_adelie_penguins$body_mass_g), max(chinstrap_adelie_penguins$body_mass_g), length.out = 100)
+fitted_chinstrap_adelie <- dnorm(x_values_chinstrap_adelie, mean = chinstrap_adelie_mu, sd = sqrt(chinstrap_adelie_sigma_sq))
+fitted_chinstrap_adelie_df <- data.frame(x = x_values_chinstrap_adelie, y = fitted_chinstrap_adelie)
+
+p2 <- ggplot(chinstrap_adelie_penguins, aes(x = body_mass_g)) +
+  geom_histogram(aes(y = ..density..), bins = 20, fill = "lightblue", color = "black") +
+  geom_line(data = fitted_chinstrap_adelie_df, aes(x = x, y = y), color = "red", size = 1.2) +
+  labs(title = "Fitted Normal Distribution for \nChinstrap + Adelie Penguins' Body Mass",
+       x = "Body Mass (g)", 
+       y = "Density") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 8, hjust = 0.5),)
+
+grid.arrange(p1, p2, nrow = 1)
+```
+
+```{r accuracy, echo=FALSE}
+gentoo_skewness <- skewness(gentoo_penguins$body_mass_g)
+gentoo_kurtosis <- kurtosis(gentoo_penguins$body_mass_g)
+
+chinstrap_adelie_skewness <- skewness(chinstrap_adelie_penguins$body_mass_g)
+chinstrap_adelie_kurtosis <- kurtosis(chinstrap_adelie_penguins$body_mass_g)
+```
+**\( G \) Skewness:** `r round(gentoo_skewness, 2)`.
+**(\( C \cup A \)) Skewness:** `r round(chinstrap_adelie_skewness, 2)`
+
+**\( G \) Kurtosis:** `r round(gentoo_kurtosis, 2)`.
+**(\( C \cup A \)) Kurtosis:** `r round(chinstrap_adelie_kurtosis, 2)`
+
+From the fitted plots (fig 6) we can visually see that the normal distribution does a
+relatively good job fitting to our data. The histogram destiny looks to fairly
+resemble the red normal distribution line fitted to the sets. To further 
+test these distributions the skewness and kurtosis of the sets have been measured.
+From these measures we can see that \(G\) is slightly right skewed compared to
+the normal distribution skew of 0. However this is still quite close to 0 thus
+reinforcing this models validity. The skewdness of (\( C \cup A \)) is a little
+more, implying a right skew to the data set however this is still fairly close to 0.
+
+By measuring the Kurtosis of \(G\) and (\( C \cup A \)) we can see that
+the tails of these sets are slightly heavier than that of the normal distribution.
+Meaning that there are more extreme outlines in the sample sets than expected in the
+normal distribution, which has a kurtosis of 3. Overall from visual and quantitative 
+assessment, sets \(G\) and (\( C \cup A \)) appear to be reasonably close to a 
+normal distribution. With the small size of our sets \(\approx 200\), likely 
+effecting \(G\) and (\( C \cup A \))s accuracy when approximating the penguin
+population. The normal distribution likely is the best fit for our data. However,
+due to the slight differences in the normal distribution and the sets the sample
+measurements may vary from the true population to some degree.
+
+
+# 3. Sexing
+To find out which characteristics of penguins would be best at estimating their
+sex we can first plot a box plot of each penguins' measurements by their sex.\
+
+```{r Sexingbotplot, fig.width=8, fig.height=2, fig.align='center', fig.cap="Penguin Measurements by Sex", echo=FALSE}
+p1 <- ggplot(my.penguins, aes(x = sex, y = bill_length_mm)) +
+  geom_boxplot() +
+  labs(title = "Bill Length", x = "Sex", y = "Bill Length (mm)") +
+  theme(axis.text.x = element_text(size = 6))
+
+
+p2 <- ggplot(my.penguins, aes(x = sex, y = bill_depth_mm)) +
+  geom_boxplot() +
+  labs(title = "Bill Depth", x = "Sex", y = "Bill Depth (mm)") +
+  theme(axis.text.x = element_text(size = 6))
+
+p3 <- ggplot(my.penguins, aes(x = sex, y = flipper_length_mm)) +
+  geom_boxplot() +
+  labs(title = "Flipper Length", x = "Sex", y = "Flipper Length (mm)") +
+  theme(axis.text.x = element_text(size = 6))
+
+p4 <- ggplot(my.penguins, aes(x = sex, y = body_mass_g)) +
+  geom_boxplot() +
+  labs(title = "Body Mass", x = "Sex", y = "Body Mass (g)") +
+  theme(axis.text.x = element_text(size = 6))
+
+grid.arrange(p1, p2, p3, p4, nrow = 1)
+```
+From these plots we can observe some difference in the median \( X \) for these
+measurements depending on their sex. Specifically the male penguins seem
+to have a much larger body mass median vs female. This hints at there being 
+some statistical difference in penguins from our male subset and female subset.
+
+We can represent the hypotheses for further testing as:
+
+- \( H_0 \): No difference in measurements between males and females, \( \mu_{\text{male}} = \mu_{\text{female}} \).
+
+- \( H_1 \): There is a difference, \( \mu_{\text{male}} \neq \mu_{\text{female}} \).
+
+### 3.1 Hypothesis Testing
+To confirm if hypothesis \(h_1 \) holds statistical significance a two-sample 
+t-test can be performed on \(M \subset P\) \(F \subset P\) where:
+
+\( M = \{p \in P \mid p.sex = "male"\}\) 
+
+\( F = \{p \in P \mid p.sex = "female"\}\)
+
+For running t-tests the sets \(F\) & \(M\) must be **IID**, independent and
+identically distributed. It is safe to say that the penguins measurements are not
+effected by each other. One penguin \(p\) will not have its flipper length effected
+by another and therefore are independent. \(F\) & \(M\) also have measurements
+coming from the same distributions within their sets and are therefore identically
+distributed.
+
+First me must check if the sample variance between male and female penguins us 
+roughly equal for both sets so that \(\sigma^2_M = \sigma^2_F\). To check this a
+a Barlett's test can be performed with R.
+```{r BarlettTestSex, echo=FALSE}
+bodymassSexBresults <- bartlett.test(body_mass_g ~ sex, data = my.penguins)
+bodymassSexBp_value <- bodymassSexBresults$p.value
+
+cat("P-value:", bodymassSexBp_value, "\n")
+```
+With this result we can accept the null hypothesis that there is no difference in
+body mass variation for \(F\) and \(M\) as \(pvalue < 0.05\) therefore a two sample
+t-test should be conducted.
+```{r t-testSex, echo=FALSE}
+male <- subset(my.penguins, sex == "male")
+female <- subset(my.penguins, sex == "female")
+
+bodymassSexTresults <- t.test(male$body_mass_g, female$body_mass_g, var.equal = TRUE)
+bodymassSexTp_value <- bodymassSexTresults$p.value
+bodymassSexTconf_interval <- bodymassSexTresults$conf.int
+bodymassSexTformatted_p_value <- format(bodymassSexTp_value, scientific = FALSE)
+
+
+cat("Sex Body Mass Welch Test Result")
+cat("P-value:", bodymassSexTformatted_p_value, "\n")
+cat("95% Confidence Interval:", bodymassSexTconf_interval, "\n")
+```
+From this result we can see there is a large difference in body size for our sets
+\(F\) and \(M\), with a p value far blow 0.05. The 95% confidence interval puts this
+difference around 420-845g. Making this a potentially great marker for distinguishing between
+male and female penguins. From performing the same tests on each of the penguins
+measurements we get the following.
+
+```{r t-testsAllSex, echo=FALSE}
+## Bill Length
+BillLenSexBresults <- bartlett.test(bill_length_mm ~ sex, data = my.penguins)
+BillLenSexBp_value <- BillLenSexBresults$p.value
+BillLenSexTresults <- t.test(male$bill_length_mm, female$bill_length_mm, var.equal = FALSE)
+BillLenSexTp_value <- BillLenSexTresults$p.value
+BillLenSexTconf_interval <- BillLenSexTresults$conf.int
+
+## Bill Depth
+BillDepthSexBresults <- bartlett.test(bill_depth_mm ~ sex, data = my.penguins)
+BillDepthSexBp_value <- BillDepthSexBresults$p.value
+BillDepthTresults <- t.test(male$bill_depth_mm, female$bill_depth_mm, var.equal = TRUE)
+BillDepthTp_value <- BillDepthTresults$p.value
+BillDepthTconf_interval <- BillDepthTresults$conf.int
+
+## Flipper Length
+FlippLenSexBresults <- bartlett.test(flipper_length_mm ~ sex, data = my.penguins)
+FlippLenSexBp_value <- FlippLenSexBresults$p.value
+FlippLenTresults <- t.test(male$flipper_length_mm, female$flipper_length_mm, var.equal = TRUE)
+FlippLenTp_value <- FlippLenTresults$p.value
+FlippLenDepthTconf_interval <- FlippLenTresults$conf.int
+```
+
+```{r t-teststable, echo=FALSE}
+data <- data.frame(
+  Measurement = c("Bill Length", "Bill Depth", "Flipper Length", "Body Mass"),
+  `Bartlett's P-value` = c(format(round(BillLenSexBp_value, 4), scientific = FALSE),
+                           format(round(BillDepthSexBp_value, 4), scientific = FALSE),
+                           format(round(FlippLenSexBp_value, 4), scientific = FALSE),
+                           format(round(bodymassSexBp_value, 4), scientific = FALSE)),
+  
+  `T-test's P-value` = c(format(round(BillLenSexTp_value, 8), scientific = FALSE),
+                         format(round(BillDepthTp_value, 8), scientific = FALSE), 
+                         format(round(FlippLenTp_value, 8), scientific = FALSE), 
+                         format(round(bodymassSexTp_value, 8), scientific = FALSE)),
+  
+    `95% Confidence Interval (Lower)` = c(BillLenSexTconf_interval[1], 
+                                        BillDepthTconf_interval[1], 
+                                        FlippLenDepthTconf_interval[1], 
+                                        bodymassSexTconf_interval[1]),
+  `95% Confidence Interval (Upper)` = c(BillLenSexTconf_interval[2], 
+                                        BillDepthTconf_interval[2], 
+                                        FlippLenDepthTconf_interval[2], 
+                                        bodymassSexTconf_interval[2])
+)
+
+kable(data, linestep = "", format = "markdown", col.names = c("Measurement", "Bartlett's P-value", "T-test's P-value", 
+                                                "95% Confidence Interval (Lower)", "95% Confidence Interval (Upper)"))
+```
+This table shows that there are several strong differences in male and female
+penguin measurements. Body mass and Bill Depth seem to be the two best measurements
+for this. However, the other measurements are all strong candidates, with p-values
+far below the 0.05 threshold needed to reject \(H_0\). Furthermore, for all
+measurements the 95% confidence intervals places the differences fairly far from 0
+meaning these measurements quite reliable for sexing male and female pigeons.
+Therefore with a high degree of certainty we can say for all measurements \(H_1\) holds.
+
+### 3.2 Logistic Regression
+To actually make predictions of penguin sex we can fit a logistic regression model
+to our data using the four measurements. Logistic regression is a statistical model used to 
+predict binary outcomes (in this case male or female) from from our variables.
+It works by predicting the log odds (the odds of male or female) as a linear function
+of our penguins variables. These odds are then turned into a probability of the penguin
+belonging to a sex with use of a logistic function. Essentially finding the boundaries
+that separate our males and females for these variables. This differs from the two
+sample t-tests done in section 3.1 which can only take into account one variable of \(P\)
+to determine differences between \(F\) and \(M\)
+
+```{r logistic regression, echo=FALSE}
+model <- glm(sex ~ body_mass_g + bill_length_mm + flipper_length_mm + bill_depth_mm, 
+             data = my.penguins, 
+             family = binomial)
+model_summary <- tidy(model)
+model_summary <- model_summary %>% select(term, estimate, std.error, statistic, p.value)
+
+predicted_prob <- predict(model, my.penguins, type = "response")
+predicted_sex <- ifelse(predicted_prob > 0.5, "male", "female")
+accuracy <- mean(predicted_sex == my.penguins$sex)
+print(model_summary)
+cat("Model Accuracy: ", round(accuracy * 100, 2), "%\n")
+
+```
+From fitting the logistic regression model we can that the most significant measures
+for determining sex are identified as body mass and bill depth. These values have much lower
+p values than others for sex estimation. This is consistent with our two sample analysis.
+Furthermore, the \(\sigma\) error and z vales (statistic) are extremely small for these
+measures, further proving that there are good variables for predicting sex. The model
+achieved from these parameters achieved a 88.5% accuracy, meaning the sex of each
+penguin was correctly predicted 88.5% of the time.
+
+# 4. Island Characteristics
+The penguin sample set \(P\) has penguins who come from three different islands 
+"Biscoe", "Torgersen" and "Dream" to find out if islands have significant statistical
+impact on penguin measurements we can split sample set \(P\) into three subsets.
+and create our hypothesis.
+
+\( B = \{p \in P \mid p.island = "Biscoe"\}\) 
+
+\(T = \{p \in P \mid p.island = "Torgersen"\}\)
+
+\(D = \{p \in P \mid p.island = "Dream"\}\)
+
+- \( H_0 \): No difference in measurements between \(B\), \(T\) and \(D\), \( \mu_{B} = \mu_{T} = \mu_{D}\).
+
+- \( H_1 \): There is a difference, \( \mu_{B} \neq \mu_{T} \neq \mu_{D}\).
+
+```{r splitIntoIslands, echo=FALSE}
+biscoe <- subset(my.penguins, island == "Biscoe")
+torgersen <- subset(my.penguins, island == "Torgersen")
+dream <- subset(my.penguins, island == "Dream")
+```
+
+```{r penguinSpeciesonIsland, fig.width=8, fig.height=3, fig.cap="Species Island Count & Penguin by Island Boxplts", echo=FALSE}
+species_count <- as.data.frame(table(my.penguins$island, my.penguins$species))
+colnames(species_count) <- c("Island", "Species", "Count")
+
+p1 <- ggplot(species_count, aes(x = Island, y = Count, fill = Species)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Penguin Species Distribution Across Islands", x = "Island", y = "Number of Penguins") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10),
+    axis.text.x = element_text(size = 8),
+    axis.text.y = element_text(size = 8)
+  )
+
+penguins_long <- my.penguins %>%
+  pivot_longer(cols = c(bill_length_mm, bill_depth_mm, flipper_length_mm, body_mass_g),
+               names_to = "Measurement", values_to = "Value")
+
+p_combined <- ggplot(penguins_long, aes(x = island, y = Value)) +
+  geom_boxplot() +
+  facet_wrap(~ Measurement, scales = "free_y", ncol = 2) +  # Facet by measurement, 2 columns
+  labs(title = "Penguin Measurements by Island", x = "Island", y = "Value") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12),
+    axis.title.x = element_text(size = 8),
+    axis.title.y = element_text(size = 10),
+    axis.text.x = element_text(size = 8, angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 6),
+    strip.text = element_text(size = 10)
+  )
+
+grid.arrange(p1, p_combined,nrow = 1)
+```
+ \(B\), \(T\) and \(D\) all contain a differing amounts of penguins from each species.
+ For example Gentoo penguins are only found on \(B\) and Chinstrap on \(D\) in the
+ sample set. Therefore, measuring the differences of all penguins on each island (as
+ seen in the above box plot) would more than likely instead measure the differences in
+ species. Which has already been completed in section 2. Therefore, to ensure I am
+ only measuring statistical differences due to the island of the penguins I will be 
+ updating the sets to only contain Adelie penguins. Which are present on all 3 islands.
+ 
+\( B = \{p \in P \mid p.island = "Biscoe"\ and \ p.species = "Adelie"\}\) 
+
+\(T = \{p \in P \mid p.island = "Torgersen"\ and \ p.species = "Adelie"\}\)
+
+\(D = \{p \in P \mid p.island = "Dream"\ and \ p.species  = "Adelie"\}\)
+
+```{r adelieboxplotbyIsland, fig.width=8, fig.height=1.8, fig.align='center', fig.cap="Adelie Measurements by Island", echo=FALSE}
+p1 <- ggplot(adelie, aes(x = island, y = bill_length_mm)) +
+  geom_boxplot() +
+  labs(title = "Bill Length", x = "Island", y = "Bill Length (mm)") +
+  theme(axis.text.x = element_text(size = 6))
+
+
+p2 <- ggplot(adelie, aes(x = island, y = bill_depth_mm)) +
+  geom_boxplot() +
+  labs(title = "Bill Depth", x = "Island", y = "Bill Depth (mm)") +
+  theme(axis.text.x = element_text(size = 6))
+
+p3 <- ggplot(adelie, aes(x = island, y = flipper_length_mm)) +
+  geom_boxplot() +
+  labs(title = "Flipper Length", x = "Island", y = "Flipper Length (mm)") +
+  theme(axis.text.x = element_text(size = 6))
+
+p4 <- ggplot(adelie, aes(x = island, y = body_mass_g)) +
+  geom_boxplot() +
+  labs(title = "Body Mass", x = "Island", y = "Body Mass (g)") +
+  theme(axis.text.x = element_text(size = 6))
+
+grid.arrange(p1, p2, p3, p4, nrow = 1)
+```
+From the box plots of sets \(B\), \(D\) and \(T\) we can see little variation
+between the medians and IQR of Adelie penguin measurements between the three islands.
+
+## 4.1 ANOVA Tests
+For statistical analysis between the three islands an ANOVA test will be conducted
+on each penguin measurement. ANOVA tests work by calculating the between group
+variability \(SSB\) and within group variability \(SSW\) for each group (island).
+
+\(SSB = \sum_{i=1}^{k} n_i (\bar{X}_i - \bar{X})^2\)
+
+\(SSW = \sum_{i=1}^{k} \sum_{j=1}^{n_i} (X_{ij} - \bar{X}_i)^2\)
+
+\(k\): number of groups
+
+\(n_i\): number of observations in group i
+
+\(k\): number of groups
+
+\(\bar{X}_i\): mean of group \(i \)
+
+\(\bar{X}\): overall mean
+
+\(X_{ij}\): individual data point \(j\) in group \(i\)
+
+\(SSB\) measures the variation in between groups, by calculating how much the groups
+mean differs from the overall mean and multiplying this by the number of observations 
+in the group. This is summed for each group (island). \(SSW\) measures the in group variability
+by summing the squared difference from the mean for each data point in the group.
+This is done and summed for all groups. We then calculate F ratio \(f = \frac{SSB}{SSW}\)
+which is used in a look up table to find it associated p value.
+
+ANOVA tests assume that the data is normally distributed, and of equal variance
+between groups. From barlett's testing we can see that all data has equal 
+variation (p-vale > 0.5 for all measurements). Additionally, by plotting Q-Q plots
+like as done in section 2.1 confirms the data is normally distributed. Making
+ANOVA tests a good choice for statistical analysis across islands.
+```{r ANOVAtest, echo=FALSE}
+anova_body_mass <- aov(body_mass_g ~ island, data = adelie)
+summary_body_mass <- summary(anova_body_mass)
+body_mass_p_value <- summary_body_mass[[1]][["Pr(>F)"]][1]
+
+anova_bill_len <- aov(bill_length_mm ~ island, data = adelie)
+summary_bill_len <- summary(anova_bill_len)
+bill_len_value <- summary_bill_len[[1]][["Pr(>F)"]][1]
+
+anova_bill_depth <- aov(bill_depth_mm ~ island, data = adelie)
+summary_bill_depth <- summary(anova_bill_depth)
+bill_depth_value <- summary_bill_depth[[1]][["Pr(>F)"]][1]
+
+anova_flipper_length <- aov(flipper_length_mm ~ island, data = adelie)
+summary_flipper_length <- summary(anova_flipper_length)
+flipper_length_p_value <- summary_flipper_length[[1]][["Pr(>F)"]][1]
+
+cat("body mass:", round(body_mass_p_value,4), "bill length:", round(bill_len_value, 4)
+    ,"bill depth:", round(bill_depth_value, 4), "flipper length:", round(flipper_length_p_value, 4))
+
+```
+From the p values, derived from ANOVA tests on each measurement. there is not enough 
+statistical difference between adelie penguins on different island to reject null 
+hypothesis \(H_0\). The p-values from these tests are too large to suggest the data 
+shows significant differences in measurements between islands. The p-value for 
+bill depth could indicate that there is variation in measurements between islands, 
+but this is still too large to reject \(H_0\). Therefore it is unlikely that there is 
+differences in penguin measurements between islands when adjusted for the differences
+for species.
